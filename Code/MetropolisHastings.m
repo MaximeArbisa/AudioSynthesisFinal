@@ -1,24 +1,26 @@
 function metro = MetropolisHastings(mu, sigma, N)
-% Uses the Metropolis Hastings sampling to generate Time Difference (TD)
-% Here, using a normal distribution of mean mu and standard deviation sigma
-% N is the length of the list of samplings wanted
+% Metropolis Hastings sampling for Time Differences (TD) generation
+% using a normal distribution N(mu, sigma^2).
+%
+% Inputs:
+%       - mu: mean of the normal distribution
+%       - sigma: standard deviation of the normal distribution
+%       - N: sampling's length
+%
+% Output:
+%       - metro: Metropolis-Hastings sampling
+
 
 %% Metropolis-Hastings sampling
 x = normrnd(mu, sigma); % Pick a random number following normal distribution
 metro = [x]; % List containing the samples
 
 for k = 1:N-1
-   %y = x + normrnd(mu, 0.6); % Pick a random number following normal distribution
     y = normrnd(mu, sigma); % Pick a random number following normal distribution
 
     alpha = min( exp(-1/2*(y-mu).^2) / exp(-1/2*(x-mu).^2), 1); % Probability to go from x to y
 
-%     if exp(-1/2*(x-mu).^2) > 0
-%         alpha = min( exp(-1/2*(y-mu).^2) / exp(-1/2*(x-mu).^2), 1); % Probability to go from x to y
-%     else
-%         alpha = 1;
-%     end
-    u = normrnd(0, 1); % value to compare to alpha
+    u = rand; % value to compare to alpha - uniform distribution
 
     if u < alpha
         x = y;

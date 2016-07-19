@@ -1,12 +1,18 @@
-function [y, y_test] = PTA(x, Fs, nbViolins)
-% Time stretching using STFT of signal x, using stretching percentage
-% "stretch".
+function [SIGNAL, SIGNALS, Dm] = PTA(x, Fs, nbInstru, display)
+% Pitch Time Amplitude (PTA) algorithm developped by J. Pätynen
 %
-% Work on each channel, independantly
+% Inputs:
+%       - x: original signal
+%       - Fs: sampling frequency
+%       - nbInstru: number of instruments
+%       - display: 1 to display Time fluctuations and Amplitude
+%       modulations. 0 otherwise.
 %
-% Pitchs = list of new pitchs for pitch shifting, decimals
+% Outputs:
+%       - SIGNAL: sum of simulated instruments
+%       - SIGNALS: seperate signals - SIGNALS(:,k) for instrument k
+%       - Dm: STFT consistency for all violins - Dm(k) for instrument k
 
-close all
 
 %% Parameters
 N = length(x); % Signal's duration
@@ -15,11 +21,9 @@ Nfft = 2048; % Precision of FFT
 
 overlap = 0.25; % overlap in %, here 75%
 I = floor(Nw*overlap); % Hop size in points
+Nt = floor((N-Nw)/I); % Trames/FFT number
 
-y = zeros(N, 1); % Synthesised signal
-y_test = zeros(N, nbViolins); % Different channels
-
-%% Windowing
+% Windowing
 w = hanning(Nw); % Analysis window
 ws = w; % Synthesis window
 
@@ -28,165 +32,164 @@ h = w.*ws;
 output = ola(h, I, 30); % Check reconstruction
 
 % window's normalisation - w.*ws == 1
-amp = max(output);
-w = w./amp; 
+[amp, P] = max(output); % P is when max is achieved (ie 1) in samples
+                        % Will be used in STFT consistency computation
+P = round(P/I)+1; % P in frames
+w = w./amp;
 
 
-% Display progression
-strf = 'Algorithm progression:';
+%% STFT
+% Initialisation
+puls = 2*pi*I*(0:Nfft-1)'/Nfft; % Canals' pulsations
+X = zeros(Nfft, Nt); % Matrix containing fft
+X(:,1) = fft(x(1:Nw).*w, Nfft); % 1st fft
 
-%% Work on every violin
-for h = 1:nbViolins
+% Parameters for time stretching
+diff_phase = zeros(Nfft, Nt-1);
+former_phase = angle(X(:,1));
 
-    % Compute pitch with a random number following normal distribution
-    pitch = normrnd(1, 0.005); % 1% of pitch modification
-
-    % resample
-    [p, q] = rat(pitch); % Get fraction
-    signal = resample(x, q, p); % New time base vector - p/q, p/q times smaller
-
-    N = length(signal);
-    Nt = floor((N-Nw)/I); % Trames/FFT number
-
-    %% Metro Hastings Sampling
-    timeDifference = zeros(1, Nt); % Time Difference
-    amplitudeModulation = zeros(1, Nt); % Amplitude modulation
-
-    % Time Difference - Metropolis-Hastings sampling
-    timeDifference = MetropolisHastings(0, 45, Nt); % mean = 0 ms
-                                                    % standard deviation = 45 ms
-
-    % Low-frequency sampling, ie smoothing
-    filt = 1/60*hanning(1500); %1/30*hanning(1500); % Hanning filter - Violin
-    %filt = 1/20*hanning(900); % Hanning filter - Trumpet
-    timeDifference = filter(filt, 1, timeDifference); % Smooth on 1s
-
-    % Add offset or start to 0
-    timeDifference = timeDifference + normrnd(0, 45);%30*randn(1);
+% STFT
+for k=2:Nt  % Loop on timeframes
+    deb = (k-1)*I +1; % Beginning - x(n+kI)
+    fin = deb + Nw -1; % End
+    tx = x(deb:fin).*w; % Timeframe
+    X(:,k) = fft(tx,Nfft); % FFT
     
-%     % Time Difference for test
-%     timeDifference = randn(1)*200*ones(1,Nt);
+    % Time stretching, using phase unwrapping method
+    diff_phase(:,k-1) = (angle(X(:,k)) - former_phase) - puls;
+    diff_phase(:,k-1) = mod(diff_phase(:,k-1) + pi,-2*pi) + pi;
+    diff_phase(:,k-1) = (diff_phase(:,k-1) + puls)./I;
     
-    % Amplitude modulation - Metropolis-Hastings sampling
-    amplitudeModulation = abs(MetropolisHastings(1, 0.4, Nt)); % mean = 1
-                                                               % standard
-                                                               % deviation
-                                                               % = 40%
-                                                              
+    former_phase = angle(X(:,k));
+end
+disp('STFT computed');
+
+%% Metropolis-Hastings for Time Differences and Amplitude Modulation
+TD = zeros(nbInstru, Nt);
+AM = zeros(nbInstru, Nt);
+for h = 1:nbInstru
+    
+    %% Time Difference - Metropolis-Hastings sampling
+    TD_t = MetropolisHastings(0, 22, 2*Nt); % mean = 0 ms
+                                            % standard deviation = 40 ms
+    
+    % Low-frequency sampling, ie smoothing with Hanning filter
+    %filt = 1/40*hanning(1500);
+    %filt = 1/15*hanning(250); % Normal use
+    filt = 1/2*hanning(120); %1/2*hanning(120); % Faster
+    %filt = 1/7*hanning(floor(Fs/(5*I))); % cutoff frequency 5Hz
+    
+    TD_t = filter(filt, 1, TD_t); % Smooth on 1s
+
+    % Add offset 
+    TD(h,:) = TD_t(Nt+1:end); % take last part to get an offset in TD
+    
+    %% Amplitude modulation - Metropolis-Hastings sampling
+    AM(h,:) = abs(MetropolisHastings(1, 0.12, Nt)); % mean = 1
+                                                % standard
+                                                % deviation
+                                                % = 30%
+    
     % Low-frequency sampling, ie smoothing
-    % 5hz low frequency in the paper. Here, 1 pt is I, ie floor(Nw*0.25) pts
-    % We want 5 Hz, ie Fs/N (frequence coupure pour hanning(N)), so N =
-    % Fs/5 pts --> Fs/(5*I)
     len = floor(Fs/(5*I));
-    filt = 1/len*hanning(len); % simple smoother, corresponding to 1s
-    amplitudeModulation = filter(filt, 1, amplitudeModulation); % Smooth on 1s
+    filt = 1/10*hanning(len); % simple smoother, corresponding to 1s
+    AM(h,:) = filter(filt, 1, AM(h,:)); % Smooth on 1s
+    
+end
 
-    % Display results
-    figure();
-    plot(timeDifference);
-    str = sprintf('Time Difference for violin n°%d', h);
-    title(str);
+% Normalisation of AM
+% normFactor = ones(nbInstru,1)*sum(AM,1); % Matrix of normalisation Factors 
+% AM = AM./normFactor;
+disp('Time Differences and Amplitude Modulations computed');
 
+% Display TD and AM
+if display
+    close all;
+    for h = 1:nbInstru
+        % Display Time Difference
+        figure();
+        plot(TD(h,:));
+        str = sprintf('Time Difference for violin n°%d', h);
+        ylabel('Time Difference in ms');
+        xlabel('Number of frames');
+        title(str);
+    
+        % Display Amplitude Modulation
+        figure();
+        plot(AM(h,:));
+        str = sprintf('Amplitude Modulation for violin n°%d', h);
+        ylabel('Amplitude');
+        xlabel('Number of frames');
+        title(str);
+    end
+end
 
-    %% STFT    
+%% PTA - Work on each violins
+disp('Computing PTA algorithm: ');
+SIGNALS = zeros(N, nbInstru);
+SIGNAL = zeros(N,1);
+Dm = zeros(nbInstru,1); % STFT consistencies
+
+for h = 1:nbInstru
+    
+    fprintf(sprintf('Instrument n°%d\n', h)); % Display progression
+    
+    % Compute pitch and resample
+    pitch = normrnd(1, 0.0071); % 2^(nbCents/1200)
+    %pitch = normrnd(1, 0.005); % normal distribution - 0.5% pitch modification
+    [p, q] = rat(pitch); % Get fraction - d^h in Q
+
+    %% iSTFT
     % Initialisation
-    puls = 2*pi*I*(0:Nfft-1)'/Nfft; % Canals' pulsations
-    Xtilde_m = zeros(Nfft, Nt); % Matrix containing fft
-    Xtilde_m(:,1) = fft(x(1:Nw), Nfft); % 1st fft
-
-    % Parameters for time stretching
-    phase = angle(Xtilde_m(:,1));
-    former_phase = phase;
-
-    for k=2:Nt-20  % Loop on timeframes
-        % Display progression
-        clc;
-        str = sprintf('Violin n°%d, treatment progression: %.1f %%', h, 100*k/Nt);
-        disp(strf);
-        disp(str);
-
-        %%% ANALYSIS
-        % Time-base vector
-        deb = (k-1)*I +1; % Beginning - x(n+kI)
-        deb = deb + floor(timeDifference(k)*10^-3*Fs); % Time difference
-        if deb <0
+    Y = zeros(Nfft, Nt);
+    Y(:,1) = X(:,1);
+    phase = angle(Y(:,1));
+    fin = Nw; % For former_deb = 1 for 1st loop
+    y = zeros(2*N,1);
+    y(1:Nw) = x(1:Nw).*w;
+    
+    % Synthesis
+    for k = 2:Nt
+        % Get former deb
+        former_deb = fin-Nw+1;
+        
+        % Get playback rate, ie synthesis marks
+        deb = (k-1)*I+1;
+        deb = p/q*deb; % Pitch shift - synthesis frames
+        deb = deb + p/q*TD(h,k)*10^-3*Fs; % Time Difference
+        deb = ceil(deb);
+        if deb <= 0
             deb = 1;
         end
         fin = deb + Nw -1;
-        tx = signal(deb:fin).*w; % Timeframe
 
-        % FFT
-        X = fft(tx,Nfft); 
+        diff_frames = deb-former_deb; %p/q*(I + (TD(h,k)-TD(h,k-1))*10^-3*Fs);
+        phase = phase + diff_phase(:,k-1)*diff_frames; % synthesis phase
 
-        % Time stretching
-%         stretch = pitch;
-%         diff_phase = (angle(X) - former_phase) - puls;
-%         diff_phase = mod(diff_phase + pi,-2*pi) + pi;
-%         %diff_phase = (diff_phase + puls) * stretch;
-%         diff_phase = (diff_phase + puls) * stretch * I/(I+(timeDifference(k)-timeDifference(k-1))*10^-3*Fs);
-
-        % With former method
-        stretch = pitch;
-        diff_phase = (angle(X) - former_phase); % Phase difference
-        diff_time = I + floor(timeDifference(k)*10^-3*Fs)-floor(timeDifference(k-1)*10^-3*Fs); % Time interval
-        diff_phase = diff_phase - 2*pi*diff_time*(0:Nfft-1)'/Nfft; % Remove analysis window phase
-        diff_phase = mod(diff_phase + pi,-2*pi) + pi;
-        freq_inst = diff_phase/diff_time+2*pi*(0:Nfft-1)'/Nfft; % Freq instant
-        diff_phase = freq_inst*stretch*I;
+        Y(:,k) = abs(X(:,k)).*exp(1i*phase);
         
-        phase = phase + diff_phase; 
-        Y = abs(X).*exp(1i*phase);
-        former_phase = angle(X);
-                
-        %%% SYNTHESIS
-        % Time stretching
-        R = floor(stretch*I);
-        deb = (k-1)*R+1;
-        fin = deb + Nw -1; % fin de trame
+        % iFFT
+        ys = real(ifft(Y(:,k), 'symmetric')); % iFFT
+        ys = ys.*ws; % framing with synthesis window
+        
+        % Amplitude Modulation
+        ys = AM(h,k).*ys;
 
-        % Reconstruction
-        ys = real(ifft(Y, 'symmetric')); % TFD inverse
-        ys = ys.*ws; % pondération par la fenêtre de synthèse
-        
-        % Amplitude modulation
-        %factorAmp = amplitudeModulation(h, k)/sum(amplitudeModulation(:,k)); % Normalisation
-        %ys = factorAmp.*ys;
-        
-        y_test(deb:fin, h) = y_test(deb:fin, h) + ys; % Each signal - y_test: stereo 
-                                                      % if 2 pitchs: soundsc(y_test, Fs)
-        y(deb:fin)=y(deb:fin)+ys; % overlap add - sum of signals
+        % Overlap add
+        y(deb:fin) = y(deb:fin) + ys; % Each signal - y_test: stereo    
     end
+ 
+    % Compute STFT consistency
+    Dm(h) = STFTConsistency(y, Fs, Y, p/q*I, p/q*TD(h,:), P);
+    fprintf(sprintf('Consistency: %f dB\n', Dm(h)));
     
-    strf = sprintf('%s\n%s',strf, str);
+    % Final resample for desired pitch shift
+    y = resample(y, q, p); % Resample by a factor 1/d
+    y = y(1:N); % Resize to x's length because of ceiling errors
+    
+    SIGNALS(:,h) = y; 
+    SIGNAL = SIGNAL + y;
+    
 end
 
-% %% Amplitude modulation, using Metropolis-Hastings
-% N = length(x);
-% ampMod = zeros(nbViolins, N);
-% 
-% for h = 1:nbViolins
-%     ampMod(h,:) = MetropolisHastings(1, 0.1, N); % mean = 1
-%                                                   % standard
-%                                                   % deviation
-%                                                   % = 10%
-%                                                               
-%     % Low-frequency sampling, ie smoothing
-%     % 5hz low frequency in the paper. Here, 1 pt is I, ie floor(Nw*0.25) pts
-%     % We want 5 Hz, ie Fs/N (frequence coupure pour hanning(N)), so N =
-%     % Fs/5 pts --> Fs/(5*I)
-%     len = floor(Fs/5);
-%     filt = 1/len*hanning(len); % simple smoother, corresponding to 1s
-%     ampMod(h,:) = filter(filt, 1, ampMod(h,:)); % Smooth on 1s
-% end
-% 
-% % Scale to 1
-% for k = 1:N
-%     ampMod(:,k) = ampMod(:,k)/sum(ampMod(:,k));
-% end
-% 
-% % Amplitude modulation
-% for h = 1:nbViolins
-%    y_test(:, h) = y_test(:, h).*ampMod(h,:)'; % Each signal - y_test: stereo 
-%    y = y+y_test(:, h);                                                   % if 2 pitchs: soundsc(y_test, Fs)    
-% end
 end
