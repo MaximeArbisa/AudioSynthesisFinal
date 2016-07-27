@@ -1,4 +1,4 @@
-function [SIGNAL, SIGNALS] = PSOLA_Final(x, Fs, nbInstru)
+function [SIGNAL, SIGNALS] = PSOLA(x, Fs, nbInstru)
 % PSOLA Method to generate nbInstru instruments:
 % - Analysis with PSOLA_AnalysisMarks
 % - For each instrument, inverse time-stretching approach:
@@ -59,11 +59,12 @@ for l = 1:nbInstru
 
     % Loop on synthesis marks - Overlap add
     while k < Ns && t_a(n(k))+h*P_a(n(k))< length(x) 
-        
         tx = x(t_a(n(k))-h*P_a(n(k)): t_a(n(k))+h*P_a(n(k))) ... 
             .*hanning(2*h*P_a(n(k))+1); % Excerpt signal of length 2*h*P_a and windowing
+        
         y(t_s(k)-h*P_a(n(k)): t_s(k)+h*P_a(n(k))) = y(t_s(k)-h*P_a(n(k)): t_s(k)+h*P_a(n(k))) ... 
             + tx; % Overlap add
+        
         k = k+1; % Next synthesis mark
     end
 
@@ -78,4 +79,3 @@ for l = 1:nbInstru
 end
 
 end
-

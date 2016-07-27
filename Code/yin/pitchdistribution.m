@@ -1,9 +1,11 @@
+% Compute the pitch distribution of our database in folder 'Strings'
+
 clear all;
 close all;
 clc;
 
 %% Read signals
-audio = dir('Strings_mastered');
+audio = dir('Strings');
 audio = audio(3:end); % Remove ./ and ../
 
 % Cents distribution
@@ -16,16 +18,18 @@ for k = 1:length(audio)
     
     % Read audio
     name_file = audio(k).name; % get name
-    [x, Fs] = audioread(strcat('Strings_mastered/', name_file)); % Read audio
+    [x, Fs] = audioread(strcat('Strings/', name_file)); % Read audio
     x = x(:,1); % Take 1st channel
     disp(name_file);
  
     % YIN algorithm
     r = yin(x, Fs);
-    disp(length(r.cents));
+%    disp(length(r.cents));
     
     % Fill pitch distribution
-    cents = [cents r.cents'];
+    cents = [cents r.cents']; % Original distribution
+    
+    % Centered distribution
     meanInstru(k) = mean(r.cents);
     r.cents = r.cents - mean(r.cents); % Remove average detune
     cents2 = [cents2 r.cents'];
@@ -56,4 +60,4 @@ ylabel('Nb of occurences');
                                     % for the fitted distributions 
                                     
 [D2, PD2] = allfitdist(cents2, 'pdf'); % D contains parameters mu and sigma 
-                                    % for the fitted distributions 
+                                       % for the fitted distributions 

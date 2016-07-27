@@ -1,6 +1,15 @@
 function [COG, transientOn] = COG_g(x)
-%UNTITLED3 Summary of this function goes here
-%   Detailed explanation goes here
+% Computes the evolution of the COG: for each frames analysed, calls
+% function computeCOG.m. Finds also transients (when C_e < 4.4%), and put
+% them in transientOn
+%
+% Inputs:
+%       - x: original signal
+%
+% Outputs:
+%       - COG: values of COG for each frames
+%       - transientOn: frames containing transients
+
 
 %% Parameters
 N = length(x); % Signal's duration
@@ -20,40 +29,25 @@ for k=2:Nt  % Loop on timeframes
     deb = (k-1)*I +1; % Beginning - x(n+kI)
     fin = deb + Nw -1; % End
    
-    COG(k) = computeCOG(x(deb:fin), w, Nfft);
+    COG(k) = computeCOG(x(deb:fin), w, Nfft); % Calls computeCOG.m
 end
 
+%% Transient detection
 transientDetected = 0;
 transientOn =  [];
 
 for k = 1:length(COG)
-    if COG(k) > 10
+    if COG(k) > max(COG)/2 % Threshold for detection: max/2
         transientDetected = 1;
     end
     
-    if (COG(k) < 6.5 && transientDetected)
-        transientOn = [transientOn (k-1)*I+1];
+    if (COG(k) < 4.4 && transientDetected) % On transient
+        transientOn = [transientOn k];
         transientDetected = 0;
     end
 end
 
-
-% COG(1:length(COG)) = COG(length(COG):-1:1);
-% 
-% for k = 1:length(COG)
-%     if COG(k) < -12
-%         transientDetected = 1;
-%     end
-%     
-%     if (COG(k) > -6 && transientDetected)
-%         transientOn = [transientOn (length(COG)-k-1)*I+1];
-%         transientDetected = 0;
-%     end
-% end
-% 
-% transientOn(1:length(transientOn)) = transientOn(length(transientOn):-1:1);
-
-%% Display
+%% Display results
 figure();
 plot(COG);
 title('Evolution of COG along the frames');

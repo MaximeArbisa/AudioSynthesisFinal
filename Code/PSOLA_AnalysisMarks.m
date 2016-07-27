@@ -34,12 +34,11 @@ while floor(t_a(k)+4*P_a(k)+1) < N  % While there's still signal to read
                                 % with autocorrelation method
     t_a(k+1) = t_a(k)+floor(P_a(k+1)); % Set next analysis mark
 
-%     Nfft = length(tx);
-%     w = hanning(Nfft);
-w = hanning(length(tx));
-Nfft = 2048;
+    w = hanning(length(tx));
+    Nfft = 2048;
 
-COG = computeCOG(tx, w, Nfft);
+    % Transient detection
+    COG = computeCOG(tx, w, Nfft);
     if COG > threshold
         transientDetected = 1;
     end

@@ -1,6 +1,6 @@
 function COG = computeCOG(x, w, Nfft)
-% Function that computes Center Of Gravity, based on time reassignement
-% operators
+% Function that computes the Center Of Gravity, based on time reassignement
+% operators, and paper from A. Röbel.
 
 %% Parameters
 Nw = length(w); % Analysis window length and length of the excerpt
@@ -25,7 +25,7 @@ cog_denum = trapz((0:Nfft-1), abs(X).^2);
 COG = cog_num/cog_denum;
 
 % Scale to window length
-COG = COG/Nw*100-5.50; % Don't know where the offset comes from
+COG = COG/Nw*100-5.50; % apparently, there is a constant offset
 
 end
 

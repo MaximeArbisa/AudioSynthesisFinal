@@ -18,7 +18,7 @@ function [ts, n] = PSOLA_SynthesisMarks(P_a, onsets, Fs, alpha)
 
 %% Time fluctuations sampling
 mu = 0; % 0ms mean for onsets
-sigma = 40; % 10ms of standard deviation 
+sigma = 10; % 10ms of standard deviation 
 onsetsLength = length(onsets); % Number of notes
 
 %metro = (10^-3*Fs).*MetropolisHastings(mu, sigma, onsetsLength); % MetroPolis sampling on onsets

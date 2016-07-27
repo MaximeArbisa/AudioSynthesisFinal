@@ -200,9 +200,7 @@ for h = 1:nbInstru
         % Overlap add
         y(deb:fin) = y(deb:fin) + ys; % Each signal - y_test: stereo    
     end
-    
-    keyboard
- 
+     
     % Compute STFT consistency
     Dm(h) = STFTConsistency(y, Fs, Y, p/q*I, p/q*TD(h,:), P);
     fprintf(sprintf('Consistency: %f dB\n', Dm(h)));
